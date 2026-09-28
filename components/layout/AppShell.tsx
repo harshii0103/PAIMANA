@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
@@ -10,6 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-canvas">
       {/* Desktop sidebar */}
       <div className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">
@@ -56,5 +57,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+    </MotionConfig>
   );
 }

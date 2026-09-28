@@ -8,15 +8,15 @@ import { SectorRiskBars } from "@/components/charts/SectorRiskBars";
 export function SectorRiskChart() {
   const query = useSectorRisk();
   return (
-    <ChartCard title="Sector-wise Risk" description="Projects per sector by overall risk level" tier="secondary">
+    <ChartCard title="Sector-wise Risk" description="Projects in each sector, grouped by risk level." tier="secondary">
       <QueryBoundary
         query={query}
-        skeletonHeight={220}
+        skeletonHeight={270}
         errorMessage="Unable to load sector risk."
         emptyMessage="No sector-level risk data available."
         isEmpty={(d) => d.length === 0}
       >
-        {(data) => <SectorRiskBars data={data} height={230} />}
+        {(data) => <SectorRiskBars data={data} height={270} />}
       </QueryBoundary>
     </ChartCard>
   );

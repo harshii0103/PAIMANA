@@ -19,6 +19,10 @@ const PAGE_META: Record<string, { title: string; description: string }> = {
     title: "Analytics",
     description: "Sector patterns, cost trends, and progress-risk relationships across the portfolio.",
   },
+  "/assistant": {
+    title: "AI Assistant",
+    description: "Conversational project queries — coming soon.",
+  },
   "/settings": {
     title: "Settings",
     description: "Workspace and account preferences.",
@@ -32,7 +36,11 @@ const PAGE_META: Record<string, { title: string; description: string }> = {
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const meta = PAGE_META[pathname] ?? PAGE_META["/dashboard"];
+  const meta =
+    PAGE_META[pathname] ??
+    (pathname.startsWith("/projects/")
+      ? { title: "Project Details", description: "Risk profile for a single monitored project." }
+      : PAGE_META["/dashboard"]);
   const [query, setQuery] = useState("");
   const openAlertCount = useOpenAlertCount();
 

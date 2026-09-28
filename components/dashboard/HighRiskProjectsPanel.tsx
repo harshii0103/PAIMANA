@@ -6,21 +6,19 @@ import { ArrowRight, ChevronRight } from "lucide-react";
 import { useHighRiskProjects } from "@/hooks/useProjects";
 import { RiskBadge } from "@/components/shared/RiskBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
-import { PanelRowsSkeleton } from "@/components/shared/Skeletons";
+import { PanelBodySkeleton } from "@/components/shared/Skeletons";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 
 export function HighRiskProjectsPanel() {
   const { data, isLoading, isError, refetch } = useHighRiskProjects(6);
 
-  if (isLoading) return <PanelRowsSkeleton rows={6} />;
-
   return (
-    <div className="rounded-lg border border-ink-200 bg-white shadow-card transition-shadow duration-200 hover:shadow-hover">
+    <div className="flex flex-col rounded-lg border border-ink-200 bg-white shadow-card transition-shadow duration-200 hover:shadow-hover">
       <div className="flex items-center justify-between border-b border-ink-100 px-5 py-4">
         <div>
-          <h3 className="text-[15px] font-semibold text-ink-900">High-Risk Projects</h3>
-          <p className="mt-0.5 text-[13px] text-ink-500">Overall risk score currently classified High</p>
+          <h3 className="text-base font-semibold leading-tight text-ink-900">High-Risk Projects</h3>
+          <p className="mt-1 text-[13px] leading-snug text-ink-500">Projects whose overall risk is currently classified High.</p>
         </div>
         <Link
           href="/explorer?risk=High"
@@ -30,7 +28,9 @@ export function HighRiskProjectsPanel() {
         </Link>
       </div>
 
-      {isError ? (
+      {isLoading ? (
+        <PanelBodySkeleton rows={6} />
+      ) : isError ? (
         <ErrorState message="Unable to load high-risk projects." onRetry={() => refetch()} />
       ) : !data || data.length === 0 ? (
         <EmptyState message="No projects are currently classified as High risk." />
@@ -56,7 +56,7 @@ export function HighRiskProjectsPanel() {
             </li>
           ))}
         </ul>
-        <div className="scrollbar-thin hidden overflow-x-auto sm:block">
+        <div className="scrollbar-thin hidden flex-1 overflow-x-auto sm:block">
           <table className="w-full min-w-[600px] text-sm">
             <thead>
               <tr className="text-left text-[11px] text-ink-400">
@@ -77,7 +77,7 @@ export function HighRiskProjectsPanel() {
                   transition={{ duration: 0.3, delay: i * 0.03 }}
                   className="border-t border-ink-100 border-l-2 border-l-transparent transition-colors hover:border-l-risk-high hover:bg-ink-25"
                 >
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3.5">
                     <div className="max-w-[210px] truncate font-medium text-ink-900">{row.project.projectName}</div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-400">
                       <span>{row.project.projectCode}</span>
@@ -85,22 +85,22 @@ export function HighRiskProjectsPanel() {
                       <span className="truncate">{row.project.sector}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <div className="flex items-center gap-2">
                       <RiskBadge level={row.risk.overallRiskLevel} />
                       <span className="tabular text-xs text-ink-400">{row.risk.overallRiskScore}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <RiskBadge level={row.risk.costRiskLevel} />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <RiskBadge level={row.risk.delayRiskLevel} />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <ProgressBar value={row.project.physicalProgress} className="w-24" />
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     <Link
                       href={`/projects/${row.project.projectCode}`}
                       className="inline-flex items-center gap-0.5 text-xs font-medium text-brand-700 transition-colors hover:text-brand-800"

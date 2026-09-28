@@ -3,30 +3,30 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, ChevronRight, SearchX } from "lucide-react";
+import { Search, ChevronRight, SearchX, X } from "lucide-react";
 import { useProjectsWithRisk } from "@/hooks/useProjects";
 import { useAlerts } from "@/hooks/useAlerts";
 import { RiskBadge } from "@/components/shared/RiskBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { QueryBoundary } from "@/components/shared/QueryBoundary";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { cn } from "@/lib/utils";
+import { FilterSelect } from "@/components/shared/FilterSelect";
+import { Toolbar } from "@/components/shared/Toolbar";
 import type { RiskLevel } from "@/types/risk";
 
 type RiskFilter = RiskLevel | "All";
+type StatusFilter = "All" | "WithOpen" | "NoOpen";
 
 /**
- * Filterable project register (Project Explorer + Design 04). Filtering only narrows the rows the
- * API returned by text/level/sector; risk values are displayed exactly as received.
+ * Project Explorer register. Filtering only narrows the rows the API returned (by text, overall
+ * risk level, sector, or whether the project has open alerts); risk values are shown as received.
  */
 export function ProjectMonitorTable({
   initialSearch = "",
   initialRisk = "All",
-  variant = "default",
 }: {
   initialSearch?: string;
   initialRisk?: RiskFilter;
-  variant?: "default" | "formal";
 }) {
   const router = useRouter();
   const query = useProjectsWithRisk();
@@ -34,7 +34,7 @@ export function ProjectMonitorTable({
   const [search, setSearch] = useState(initialSearch);
   const [risk, setRisk] = useState<RiskFilter>(initialRisk);
   const [sector, setSector] = useState("All");
-  const formal = variant === "formal";
+  const [status, setStatus] = useState<StatusFilter>("All");
 
   const openAlertsByCode = useMemo(() => {
     const map = new Map<string, number>();
@@ -44,13 +44,21 @@ export function ProjectMonitorTable({
     return map;
   }, [alerts.data]);
 
-  const control = cn(
-    "border bg-white px-3 py-1.5 text-[13px] text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600",
-    formal ? "rounded-sm border-[#CBD5E1]" : "rounded-md border-ink-200"
-  );
+  function clearAll() {
+    setSearch("");
+    setRisk("All");
+    setSector("All");
+    setStatus("All");
+  }
 
   return (
-    <QueryBoundary query={query} skeletonHeight={320} errorMessage="Unable to load the project register." emptyMessage="No projects are being monitored yet." isEmpty={(d) => d.length === 0}>
+    <QueryBoundary
+      query={query}
+      skeletonHeight={420}
+      errorMessage="Unable to load the project register."
+      emptyMessage="No projects are being monitored yet."
+      isEmpty={(d) => d.length === 0}
+    >
       {(rows) => {
         const sectors = Array.from(new Set(rows.map((r) => r.project.sector))).sort();
         const q = search.trim().toLowerCase();
@@ -60,125 +68,185 @@ export function ProjectMonitorTable({
             [p.projectCode, p.projectName, p.sector, p.ministry, p.state, p.implementingAgency].some((f) =>
               f.toLowerCase().includes(q)
             );
-          return matchesText && (risk === "All" || r.overallRiskLevel === risk) && (sector === "All" || p.sector === sector);
+          const open = openAlertsByCode.get(p.projectCode) ?? 0;
+          return (
+            matchesText &&
+            (risk === "All" || r.overallRiskLevel === risk) &&
+            (sector === "All" || p.sector === sector) &&
+            (status === "All" || (status === "WithOpen" ? open > 0 : open === 0))
+          );
         });
-        const hasFilters = q !== "" || risk !== "All" || sector !== "All";
+        const hasFilters = q !== "" || risk !== "All" || sector !== "All" || status !== "All";
 
         return (
           <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <label className={cn("flex min-w-[220px] flex-1 items-center gap-2", control)}>
+            <Toolbar
+              count={
+                <>
+                  <span className="tabular">
+                    <span className="font-semibold text-ink-900">{filtered.length}</span>{" "}
+                    {filtered.length === rows.length ? (filtered.length === 1 ? "project" : "projects") : `of ${rows.length} projects`}
+                  </span>
+                  <span className="hidden rounded border border-brand-100 bg-brand-25 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-brand-700 md:inline">
+                    DEMO DATA
+                  </span>
+                </>
+              }
+            >
+              <label className="ui-control flex min-w-[220px] flex-1 items-center gap-2 sm:max-w-sm" data-active={q !== ""}>
                 <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Code, name, sector, ministry or state"
-                  aria-label="Search projects"
-                  className="w-full bg-transparent focus:outline-none"
+                  placeholder="Search projects…"
+                  aria-label="Search projects by code, name, sector, ministry or state"
+                  className="w-full bg-transparent placeholder:text-ink-400 focus:outline-none"
                 />
+                {search && (
+                  <button type="button" onClick={() => setSearch("")} aria-label="Clear search" className="text-ink-400 hover:text-ink-700">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </label>
-              <select value={risk} onChange={(e) => setRisk(e.target.value as RiskFilter)} aria-label="Filter by overall risk" className={control}>
-                <option value="All">All risk levels</option>
-                <option value="High">High risk</option>
-                <option value="Medium">Medium risk</option>
-                <option value="Low">Low risk</option>
-              </select>
-              <select value={sector} onChange={(e) => setSector(e.target.value)} aria-label="Filter by sector" className={control}>
-                <option value="All">All sectors</option>
-                {sectors.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-              <span className="ml-auto text-xs text-ink-500 tabular">
-                Showing {filtered.length} of {rows.length}
-              </span>
-            </div>
+              <FilterSelect
+                label="Filter by overall risk"
+                value={risk}
+                onChange={(v) => setRisk(v as RiskFilter)}
+                options={[
+                  { value: "All", label: "All Risk" },
+                  { value: "High", label: "High Risk" },
+                  { value: "Medium", label: "Medium Risk" },
+                  { value: "Low", label: "Low Risk" },
+                ]}
+              />
+              <FilterSelect
+                label="Filter by sector"
+                value={sector}
+                onChange={setSector}
+                options={[{ value: "All", label: "All Sectors" }, ...sectors.map((s) => ({ value: s, label: s }))]}
+              />
+              <FilterSelect
+                label="Filter by alert status"
+                value={status}
+                onChange={(v) => setStatus(v as StatusFilter)}
+                options={[
+                  { value: "All", label: "All Status" },
+                  { value: "WithOpen", label: "Has open alerts" },
+                  { value: "NoOpen", label: "No open alerts" },
+                ]}
+              />
+              {hasFilters && (
+                <button type="button" onClick={clearAll} className="ui-button-ghost px-3">
+                  Clear
+                </button>
+              )}
+            </Toolbar>
 
             {filtered.length === 0 ? (
-              <div className={cn("border bg-white", formal ? "rounded-sm border-[#CBD5E1]" : "rounded-lg border-ink-200")}>
+              <div className="rounded-lg border border-ink-200 bg-white shadow-card">
                 <EmptyState icon={SearchX} message="No projects match the current filters." />
-                {hasFilters && (
-                  <div className="pb-6 text-center">
-                    <button
-                      onClick={() => { setSearch(""); setRisk("All"); setSector("All"); }}
-                      className="text-sm font-medium text-brand-700 hover:text-brand-800"
-                    >
-                      Clear filters
-                    </button>
-                  </div>
-                )}
+                <div className="pb-8 text-center">
+                  <button onClick={clearAll} className="text-sm font-medium text-brand-700 hover:text-brand-800">
+                    Clear filters
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className={cn("scrollbar-thin overflow-x-auto border bg-white", formal ? "rounded-sm border-[#CBD5E1]" : "rounded-lg border-ink-200 shadow-card")}>
-                <table className="w-full min-w-[880px] text-[13px]">
-                  <thead>
-                    <tr className={cn("text-left text-xs text-ink-500", formal ? "bg-[#F1F5F9] border-b border-[#CBD5E1]" : "border-b border-ink-100")}>
-                      <th className="px-4 py-2.5 font-semibold">Project</th>
-                      <th className="px-3 py-2.5 font-semibold">Sector · State</th>
-                      <th className="px-3 py-2.5 font-semibold">Overall Risk</th>
-                      <th className="px-3 py-2.5 font-semibold">Cost Risk</th>
-                      <th className="px-3 py-2.5 font-semibold">Delay Risk</th>
-                      <th className="px-3 py-2.5 font-semibold">Progress</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">Open alerts</th>
-                      <th className="w-8 px-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(({ project: p, risk: r }) => {
-                      const open = openAlertsByCode.get(p.projectCode) ?? 0;
-                      return (
-                        <tr
-                          key={p.projectCode}
-                          onClick={() => router.push(`/projects/${p.projectCode}`)}
-                          className={cn("cursor-pointer border-t transition-colors hover:bg-brand-25", formal ? "border-[#E2E8F0]" : "border-ink-100")}
-                        >
-                          <td className="px-4 py-2.5">
-                            <Link
-                              href={`/projects/${p.projectCode}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="block max-w-[260px] truncate font-medium text-ink-900 hover:text-brand-700"
-                            >
-                              {p.projectName}
-                            </Link>
-                            <div className="text-xs text-ink-400">{p.projectCode}</div>
-                          </td>
-                          <td className="px-3 py-2.5 text-ink-600">
-                            {p.sector}
-                            <div className="text-xs text-ink-400">{p.state}</div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <RiskBadge level={r.overallRiskLevel} />
-                              <span className="tabular text-xs text-ink-400">{r.overallRiskScore}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <RiskBadge level={r.costRiskLevel} />
-                              <span className="tabular text-xs text-ink-400">{r.costRiskScore}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <RiskBadge level={r.delayRiskLevel} />
-                              <span className="tabular text-xs text-ink-400">{r.delayRiskScore}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5"><ProgressBar value={p.physicalProgress} className="w-28" /></td>
-                          <td className="px-3 py-2.5 text-center">
-                            {open > 0 ? (
-                              <span className="inline-flex min-w-[20px] justify-center rounded-full bg-risk-highBg px-1.5 py-0.5 text-xs font-semibold text-risk-high">{open}</span>
-                            ) : (
-                              <span className="text-ink-300">—</span>
-                            )}
-                          </td>
-                          <td className="px-2 text-ink-400"><ChevronRight className="h-4 w-4" /></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Mobile / small tablet: cards */}
+                <ul className="space-y-2.5 md:hidden">
+                  {filtered.map(({ project: p, risk: r }) => (
+                    <li key={p.projectCode}>
+                      <Link href={`/projects/${p.projectCode}`} className="block rounded-lg border border-ink-200 bg-white p-4 shadow-card transition-colors hover:bg-ink-25">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-ink-900">{p.projectName}</div>
+                            <div className="mt-0.5 text-xs text-ink-400">{p.projectCode} · {p.sector} · {p.state}</div>
+                          </div>
+                          <RiskBadge level={r.overallRiskLevel} />
+                        </div>
+                        <div className="mt-3 flex items-center gap-3 text-xs text-ink-500">
+                          <span>Cost <span className="tabular font-medium text-ink-700">{r.costRiskScore}</span></span>
+                          <span>Delay <span className="tabular font-medium text-ink-700">{r.delayRiskScore}</span></span>
+                        </div>
+                        <ProgressBar value={p.physicalProgress} className="mt-2.5" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Desktop table */}
+                <div className="scrollbar-thin hidden overflow-x-auto rounded-lg border border-ink-200 bg-white shadow-card md:block">
+                  <table className="w-full min-w-[900px] text-[13px]">
+                    <thead>
+                      <tr className="border-b border-ink-100 bg-ink-25 text-left text-xs text-ink-500">
+                        <th className="px-5 py-3 font-medium">Project</th>
+                        <th className="px-4 py-3 font-medium">Sector · State</th>
+                        <th className="px-4 py-3 font-medium">Overall Risk</th>
+                        <th className="px-4 py-3 font-medium">Cost Risk</th>
+                        <th className="px-4 py-3 font-medium">Delay Risk</th>
+                        <th className="px-4 py-3 font-medium">Progress</th>
+                        <th className="px-4 py-3 text-center font-medium">Open alerts</th>
+                        <th className="w-10 px-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(({ project: p, risk: r }) => {
+                        const open = openAlertsByCode.get(p.projectCode) ?? 0;
+                        return (
+                          <tr
+                            key={p.projectCode}
+                            onClick={() => router.push(`/projects/${p.projectCode}`)}
+                            className="cursor-pointer border-t border-ink-100 transition-colors hover:bg-brand-25"
+                          >
+                            <td className="px-5 py-3.5">
+                              <Link
+                                href={`/projects/${p.projectCode}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="block max-w-[280px] truncate font-medium text-ink-900 hover:text-brand-700"
+                              >
+                                {p.projectName}
+                              </Link>
+                              <div className="mt-0.5 text-xs text-ink-400">{p.projectCode}</div>
+                            </td>
+                            <td className="px-4 py-3.5 text-ink-700">
+                              {p.sector}
+                              <div className="mt-0.5 text-xs text-ink-400">{p.state}</div>
+                            </td>
+                            {[
+                              [r.overallRiskLevel, r.overallRiskScore],
+                              [r.costRiskLevel, r.costRiskScore],
+                              [r.delayRiskLevel, r.delayRiskScore],
+                            ].map(([level, score], i) => (
+                              <td key={i} className="px-4 py-3.5">
+                                <div className="flex items-center gap-2">
+                                  <RiskBadge level={level as RiskLevel} />
+                                  <span className="tabular text-xs text-ink-400">{score}</span>
+                                </div>
+                              </td>
+                            ))}
+                            <td className="px-4 py-3.5">
+                              <ProgressBar value={p.physicalProgress} className="w-28" />
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              {open > 0 ? (
+                                <span className="inline-flex min-w-[22px] justify-center rounded-full bg-risk-highBg px-1.5 py-0.5 text-xs font-semibold text-risk-high">
+                                  {open}
+                                </span>
+                              ) : (
+                                <span className="text-ink-300">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 text-ink-400">
+                              <ChevronRight className="h-4 w-4" />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         );

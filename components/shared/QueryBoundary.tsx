@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { ErrorState } from "./ErrorState";
@@ -40,5 +41,9 @@ export function QueryBoundary<T>({
   if (isEmpty && isEmpty(query.data)) {
     return <EmptyState dark={dark} message={emptyMessage} />;
   }
-  return <>{children(query.data)}</>;
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+      {children(query.data)}
+    </motion.div>
+  );
 }

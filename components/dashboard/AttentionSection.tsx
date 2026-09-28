@@ -1,28 +1,15 @@
-"use client";
-
-import { motion } from "framer-motion";
 import { HighRiskProjectsPanel } from "./HighRiskProjectsPanel";
 import { EarlyWarningsPanel } from "./EarlyWarningsPanel";
 
 export function AttentionSection() {
   return (
-    <section className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        className="min-w-0 lg:col-span-3"
-      >
+    <section className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+      <div className="min-w-0 lg:col-span-3 [&>*]:h-full">
         <HighRiskProjectsPanel />
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut", delay: 0.05 }}
-        className="min-w-0 lg:col-span-2"
-      >
+      </div>
+      <div className="min-w-0 lg:col-span-2 [&>*]:h-full">
         <EarlyWarningsPanel />
-      </motion.div>
+      </div>
     </section>
   );
 }

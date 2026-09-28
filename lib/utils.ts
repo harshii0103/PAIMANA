@@ -66,3 +66,8 @@ export const statusTokens: Record<AlertStatus, { text: string; bg: string }> = {
 export function formatCurrencyCr(value: number): string {
   return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 1 })} Cr`;
 }
+
+export function formatDate(iso?: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}

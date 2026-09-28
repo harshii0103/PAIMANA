@@ -6,7 +6,7 @@ import { ArrowRight, ChevronRight } from "lucide-react";
 import { useAlerts, useOpenAlertCount } from "@/hooks/useAlerts";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { PanelRowsSkeleton } from "@/components/shared/Skeletons";
+import { PanelBodySkeleton } from "@/components/shared/Skeletons";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
@@ -19,19 +19,17 @@ export function EarlyWarningsPanel() {
     .sort((a, b) => Number(b.status === "Open") - Number(a.status === "Open") || b.raisedDate.localeCompare(a.raisedDate))
     .slice(0, 6);
 
-  if (isLoading) return <PanelRowsSkeleton rows={6} />;
-
   return (
-    <div className="rounded-lg border border-ink-200 bg-white shadow-card transition-shadow duration-200 hover:shadow-hover">
+    <div className="flex flex-col rounded-lg border border-ink-200 bg-white shadow-card transition-shadow duration-200 hover:shadow-hover">
       <div className="flex items-center justify-between border-b border-ink-100 px-5 py-4">
         <div>
-          <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink-900">
+          <h3 className="flex items-center gap-2 text-base font-semibold leading-tight text-ink-900">
             Early Warnings
             {openCount > 0 && (
               <span className="rounded-full bg-risk-highBg px-2 py-0.5 text-[11px] font-semibold text-risk-high">{openCount} open</span>
             )}
           </h3>
-          <p className="mt-0.5 text-[13px] text-ink-500">Alerts raised as project risk state changes</p>
+          <p className="mt-1 text-[13px] leading-snug text-ink-500">Alerts raised when a project&apos;s risk state changes.</p>
         </div>
         <Link
           href="/alerts"
@@ -41,12 +39,14 @@ export function EarlyWarningsPanel() {
         </Link>
       </div>
 
-      {isError ? (
+      {isLoading ? (
+        <PanelBodySkeleton rows={6} />
+      ) : isError ? (
         <ErrorState message="Unable to load early warnings." onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
         <EmptyState message="No early warnings — all monitored projects are currently within expected risk thresholds." />
       ) : (
-        <ul className="divide-y divide-ink-100">
+        <ul className="flex-1 divide-y divide-ink-100">
           {rows.map((alert, i) => (
             <motion.li
               key={alert.id}

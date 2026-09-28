@@ -18,6 +18,21 @@
   }
 }
 
+@layer components {
+  /* One height / radius / border for every input, select and secondary button */
+  .ui-control {
+    @apply h-9 rounded-md border border-ink-200 bg-white px-3 text-[13px] text-ink-900 transition-colors;
+  }
+  .ui-control:hover { @apply border-ink-300; }
+  .ui-control:focus-within { @apply border-brand-600 outline-none ring-2 ring-brand-600/15; }
+  .ui-control[data-active="true"] { @apply border-brand-600 bg-brand-50 text-brand-700; }
+  .ui-button {
+    @apply inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-4 text-[13px] font-medium transition-colors;
+  }
+  .ui-button-primary { @apply ui-button bg-brand-600 text-white hover:bg-brand-700; }
+  .ui-button-ghost { @apply ui-button text-ink-600 hover:bg-ink-100; }
+}
+
 @layer utilities {
   .tabular {
     font-variant-numeric: tabular-nums;

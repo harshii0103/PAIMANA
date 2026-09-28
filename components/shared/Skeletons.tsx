@@ -46,3 +46,22 @@ export function PanelRowsSkeleton({ rows = 5 }: { rows?: number }) {
     </div>
   );
 }
+
+/** Body-only skeleton so panels keep their frame/header (no layout jump) while loading. */
+export function PanelBodySkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="divide-y divide-ink-100" aria-busy="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 px-5 py-3.5">
+          <div className="flex-1 space-y-2">
+            <Shimmer className="h-3.5 w-2/5" />
+            <Shimmer className="h-3 w-1/4" />
+          </div>
+          <Shimmer className="h-5 w-16 rounded-full" />
+          <Shimmer className="hidden h-5 w-16 rounded-full sm:block" />
+          <Shimmer className="hidden h-2 w-24 rounded-full md:block" />
+        </div>
+      ))}
+    </div>
+  );
+}
