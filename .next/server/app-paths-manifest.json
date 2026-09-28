@@ -1,0 +1,7 @@
+{
+  "/(main)/explorer/page": "app/(main)/explorer/page.js",
+  "/(main)/projects/[id]/page": "app/(main)/projects/[id]/page.js",
+  "/(main)/dashboard/page": "app/(main)/dashboard/page.js",
+  "/(main)/alerts/page": "app/(main)/alerts/page.js",
+  "/(main)/assistant/page": "app/(main)/assistant/page.js"
+}
