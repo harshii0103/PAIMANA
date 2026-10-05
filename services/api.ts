@@ -1,122 +1,622 @@
 /**
  * DATA SERVICE LAYER
  * ------------------------------------------------------------
- * Single boundary between UI components and data. Today it reads
- * mockData.ts. When the FastAPI backend is ready, only the bodies
- * of these functions change (to real fetch calls against the
- * endpoints below) — components and hooks never need to change.
- *
- * Target FastAPI endpoints (per PAIMANA architecture doc):
- *   GET /projects
- *   GET /project/{id}
- *   GET /risk            -> portfolio + per-project risk
- *   GET /alerts
- *   GET /benchmark
- *   GET /explanation
+ * Frontend <-> FastAPI boundary.
  */
+
 import { z } from "zod";
-import {
-  mockProjects,
-  mockRisks,
-  mockPortfolioSummary,
-  mockSectorRisk,
-  mockAlerts,
-} from "./mockData";
+
 import { Project } from "@/types/project";
-import { ProjectRisk, PortfolioRiskSummary, SectorRisk } from "@/types/risk";
+import {
+  ProjectRisk,
+  PortfolioRiskSummary,
+  SectorRisk,
+} from "@/types/risk";
 import { ProjectAlert } from "@/types/alert";
 
-const SIMULATED_LATENCY_MS = 450;
 
-// Runtime validation at the two boundaries that matter most once this talks
-// to a real FastAPI backend: risk predictions and alerts. If the shape ever
-// drifts from what the UI expects, this fails loudly in dev instead of
-// rendering silently-wrong badges.
-const riskLevelSchema = z.enum(["High", "Medium", "Low"]);
+// ============================================================
+// BASE URL
+// ============================================================
 
-const projectRiskSchema = z.object({
-  projectCode: z.string(),
-  delayRiskScore: z.number().min(0).max(100),
-  costRiskScore: z.number().min(0).max(100),
-  overallRiskScore: z.number().min(0).max(100),
-  delayRiskLevel: riskLevelSchema,
-  costRiskLevel: riskLevelSchema,
-  overallRiskLevel: riskLevelSchema,
-  predictionDate: z.string(),
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://127.0.0.1:8000";
+
+
+// ============================================================
+// TYPES FOR BACKEND RESPONSES
+// ============================================================
+
+interface BackendProject {
+  projectCode: string | number;
+  projectName: string;
+  sector: string;
+  ministry: string;
+  implementingAgency: string;
+  state?: string;
+
+  originalCost: number;
+  revisedCost: number;
+  expenditure: number;
+  physicalProgress: number;
+
+  sanctionDate: string;
+  originalCommissioningDate: string;
+  revisedCommissioningDate?: string;
+}
+
+interface BackendProjectsResponse {
+  total_projects: number;
+  projects: BackendProject[];
+}
+
+interface BackendRiskRow {
+  projectCode: string | number;
+
+  delayRiskScore: number;
+  costRiskScore: number;
+  overallRiskScore: number;
+
+  delayRiskLevel: string;
+  costRiskLevel: string;
+  overallRiskLevel: string;
+
+  predictionDate: string;
+}
+
+interface BackendRisksResponse {
+  total_projects: number;
+  risks: BackendRiskRow[];
+}
+
+
+// ============================================================
+// ZOD SCHEMAS
+// ============================================================
+
+const backendProjectRiskSchema = z.object({
+  project: z.object({
+    project_code: z.string(),
+    project_name: z.string(),
+    sector: z.string(),
+    ministry: z.string(),
+    agency: z.string(),
+  }),
+
+  indicators: z.object({
+    original_cost: z.number(),
+    expenditure: z.number(),
+    physical_progress: z.number(),
+    expenditure_ratio: z.number(),
+    project_age_days: z.number(),
+    time_remaining_days: z.number(),
+  }),
+
+  cost_risk: z.object({
+    probability: z.number(),
+    percentage: z.number(),
+    risk_level: z.string(),
+  }),
+
+  delay_risk: z.object({
+    probability: z.number(),
+    percentage: z.number(),
+    risk_level: z.string(),
+  }),
+
+  overall_risk: z.object({
+    probability: z.number(),
+    percentage: z.number(),
+    risk_level: z.string(),
+  }),
+
+  as_of_date: z.string(),
 });
 
-const alertSchema = z.object({
-  id: z.string(),
-  projectCode: z.string(),
-  projectName: z.string(),
-  alertType: z.string(),
-  severity: z.enum(["Critical", "High", "Medium"]),
-  status: z.enum(["Open", "Acknowledged", "Resolved"]),
-  relevantRisk: z.enum(["Delay Risk", "Cost Risk", "Overall Risk"]),
-  raisedDate: z.string(),
-});
 
-function validate<T>(schema: z.ZodType<T>, data: unknown, context: string): T {
+// ============================================================
+// VALIDATION
+// ============================================================
+
+function validate<T>(
+  schema: z.ZodType<T>,
+  data: unknown,
+  context: string
+): T {
   const result = schema.safeParse(data);
+
   if (!result.success) {
-    // In production this would surface as a card-level ErrorState via
-    // TanStack Query's error handling, not a thrown crash.
-    console.error(`[api] ${context} failed validation:`, result.error.flatten());
-    throw new Error(`Invalid ${context} response shape`);
+    console.error(
+      `[api] ${context} validation failed:`,
+      result.error.flatten()
+    );
+
+    throw new Error(`Invalid ${context} response`);
   }
+
   return result.data;
 }
 
-function delay<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), SIMULATED_LATENCY_MS));
+
+// ============================================================
+// GENERIC FETCH
+// ============================================================
+
+async function apiFetch<T>(
+  endpoint: string
+): Promise<T> {
+  const response = await fetch(
+    `${BASE_URL}${endpoint}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `API request failed: ${response.status}`
+    );
+  }
+
+  return (await response.json()) as T;
 }
 
-export async function fetchPortfolioSummary(): Promise<PortfolioRiskSummary> {
-  // Future: return (await fetch(`${BASE_URL}/risk/summary`)).json()
-  return delay(mockPortfolioSummary);
+
+// ============================================================
+// NORMALIZE RISK LEVEL
+// ============================================================
+
+function normalizeRiskLevel(
+  value: string
+): "High" | "Medium" | "Low" {
+  const normalized = String(value).toLowerCase().trim();
+
+  if (normalized === "high") {
+    return "High";
+  }
+
+  if (normalized === "medium") {
+    return "Medium";
+  }
+
+  return "Low";
 }
+
+
+// ============================================================
+// PROJECTS
+// ============================================================
 
 export async function fetchProjects(): Promise<Project[]> {
-  // Future: return (await fetch(`${BASE_URL}/projects`)).json()
-  return delay(mockProjects);
+  const raw = await apiFetch<BackendProjectsResponse>(
+    "/projects"
+  );
+
+  return raw.projects.map((project) => ({
+    projectCode: String(project.projectCode),
+    projectName: project.projectName,
+    sector: project.sector,
+    ministry: project.ministry,
+    implementingAgency: project.implementingAgency,
+    state: project.state ?? "Not available",
+
+    originalCost: Number(project.originalCost ?? 0),
+    revisedCost: Number(project.revisedCost ?? 0),
+    expenditure: Number(project.expenditure ?? 0),
+    physicalProgress: Number(
+      project.physicalProgress ?? 0
+    ),
+
+    sanctionDate: project.sanctionDate ?? "",
+    originalCommissioningDate:
+      project.originalCommissioningDate ?? "",
+
+    revisedCommissioningDate:
+      project.revisedCommissioningDate ?? "",
+  }));
 }
+
+
+// ============================================================
+// SINGLE PROJECT RISK
+// ============================================================
+
+export async function fetchProjectRisk(
+  projectCode: string
+): Promise<ProjectRisk> {
+  const raw = await apiFetch<unknown>(
+    `/project/${encodeURIComponent(projectCode)}`
+  );
+
+  const data = validate(
+    backendProjectRiskSchema,
+    raw,
+    "ProjectRisk"
+  );
+
+  return {
+    projectCode: data.project.project_code,
+
+    delayRiskScore:
+      data.delay_risk.percentage,
+
+    costRiskScore:
+      data.cost_risk.percentage,
+
+    overallRiskScore:
+      data.overall_risk.percentage,
+
+    delayRiskLevel:
+      normalizeRiskLevel(
+        data.delay_risk.risk_level
+      ),
+
+    costRiskLevel:
+      normalizeRiskLevel(
+        data.cost_risk.risk_level
+      ),
+
+    overallRiskLevel:
+      normalizeRiskLevel(
+        data.overall_risk.risk_level
+      ),
+
+    predictionDate:
+      data.as_of_date,
+  };
+}
+
+
+// ============================================================
+// ALL PROJECT RISKS
+// ============================================================
 
 export async function fetchProjectRisks(): Promise<ProjectRisk[]> {
-  // Future: const raw = await (await fetch(`${BASE_URL}/risk`)).json()
-  const raw = await delay(mockRisks);
-  return raw.map((r) => validate(projectRiskSchema, r, "ProjectRisk"));
+  const data = await apiFetch<BackendRisksResponse>(
+    "/risk"
+  );
+
+  return data.risks.map((risk) => ({
+    projectCode: String(risk.projectCode),
+
+    delayRiskScore: Number(
+      risk.delayRiskScore ?? 0
+    ),
+
+    costRiskScore: Number(
+      risk.costRiskScore ?? 0
+    ),
+
+    overallRiskScore: Number(
+      risk.overallRiskScore ?? 0
+    ),
+
+    delayRiskLevel:
+      normalizeRiskLevel(
+        risk.delayRiskLevel
+      ),
+
+    costRiskLevel:
+      normalizeRiskLevel(
+        risk.costRiskLevel
+      ),
+
+    overallRiskLevel:
+      normalizeRiskLevel(
+        risk.overallRiskLevel
+      ),
+
+    predictionDate:
+      risk.predictionDate,
+  }));
 }
 
-export async function fetchSectorRisk(): Promise<SectorRisk[]> {
-  // Future: return (await fetch(`${BASE_URL}/risk/by-sector`)).json()
-  return delay(mockSectorRisk);
-}
 
-export async function fetchAlerts(): Promise<ProjectAlert[]> {
-  // Future: const raw = await (await fetch(`${BASE_URL}/alerts`)).json()
-  const raw = await delay(mockAlerts);
-  return raw.map((a) => validate(alertSchema, a, "ProjectAlert"));
-}
+// ============================================================
+// PROJECT + RISK
+// ============================================================
 
-// Convenience: joins Project + ProjectRisk for table/panel rendering.
-export async function fetchHighRiskProjects(limit = 6) {
-  const [projects, risks] = await Promise.all([fetchProjects(), fetchProjectRisks()]);
-  const riskByCode = new Map(risks.map((r) => [r.projectCode, r]));
+export async function fetchProjectsWithRisk() {
+  const [projects, risks] =
+    await Promise.all([
+      fetchProjects(),
+      fetchProjectRisks(),
+    ]);
+
+  const riskByCode = new Map(
+    risks.map((risk) => [
+      risk.projectCode,
+      risk,
+    ])
+  );
 
   return projects
-    .map((p) => ({ project: p, risk: riskByCode.get(p.projectCode) }))
-    .filter((row): row is { project: Project; risk: ProjectRisk } => !!row.risk)
-    .filter((row) => row.risk.overallRiskLevel === "High")
-    .sort((a, b) => b.risk.overallRiskScore - a.risk.overallRiskScore)
+    .map((project) => ({
+      project,
+      risk: riskByCode.get(
+        project.projectCode
+      ),
+    }))
+    .filter(
+      (
+        row
+      ): row is {
+        project: Project;
+        risk: ProjectRisk;
+      } => !!row.risk
+    )
+    .sort(
+      (a, b) =>
+        b.risk.overallRiskScore -
+        a.risk.overallRiskScore
+    );
+}
+
+
+// ============================================================
+// HIGH-RISK PROJECTS
+// ============================================================
+
+export async function fetchHighRiskProjects(
+  limit = 6
+) {
+  const rows =
+    await fetchProjectsWithRisk();
+
+  return rows
+    .filter(
+      (row) =>
+        row.risk.overallRiskLevel ===
+        "High"
+    )
     .slice(0, limit);
 }
 
-// All projects joined with their backend-provided risk values, highest overall score first.
-export async function fetchProjectsWithRisk() {
-  const [projects, risks] = await Promise.all([fetchProjects(), fetchProjectRisks()]);
-  const riskByCode = new Map(risks.map((r) => [r.projectCode, r]));
-  return projects
-    .map((project) => ({ project, risk: riskByCode.get(project.projectCode) }))
-    .filter((row): row is { project: Project; risk: ProjectRisk } => !!row.risk)
-    .sort((a, b) => b.risk.overallRiskScore - a.risk.overallRiskScore);
+
+// ============================================================
+// PORTFOLIO SUMMARY
+// ============================================================
+
+export async function fetchPortfolioSummary(): Promise<PortfolioRiskSummary> {
+  const rows =
+    await fetchProjectsWithRisk();
+
+  const highRisk = rows.filter(
+    (row) =>
+      row.risk.overallRiskLevel === "High"
+  ).length;
+
+  const mediumRisk = rows.filter(
+    (row) =>
+      row.risk.overallRiskLevel === "Medium"
+  ).length;
+
+  const lowRisk = rows.filter(
+    (row) =>
+      row.risk.overallRiskLevel === "Low"
+  ).length;
+
+  const highDelayRisk = rows.filter(
+    (row) =>
+      row.risk.delayRiskLevel === "High"
+  ).length;
+
+  const highCostRisk = rows.filter(
+    (row) =>
+      row.risk.costRiskLevel === "High"
+  ).length;
+
+  return {
+    totalProjects: rows.length,
+    highRisk,
+    mediumRisk,
+    lowRisk,
+    highDelayRisk,
+    highCostRisk,
+  };
+}
+
+
+// ============================================================
+// ALERTS
+// ============================================================
+
+export async function fetchAlerts(): Promise<ProjectAlert[]> {
+  const [projects, risks] =
+    await Promise.all([
+      fetchProjects(),
+      fetchProjectRisks(),
+    ]);
+
+  const projectByCode = new Map(
+    projects.map((project) => [
+      project.projectCode,
+      project,
+    ])
+  );
+
+  const alerts: ProjectAlert[] = [];
+
+  for (const risk of risks) {
+    const project =
+      projectByCode.get(
+        risk.projectCode
+      );
+
+    if (!project) {
+      continue;
+    }
+
+    // --------------------------------------------------------
+    // Delay Risk Alert
+    // --------------------------------------------------------
+
+    if (
+      risk.delayRiskLevel === "High"
+    ) {
+      alerts.push({
+        id: `${risk.projectCode}-delay`,
+        projectCode: risk.projectCode,
+        projectName: project.projectName,
+        alertType:
+          "Delay Risk Threshold Breach",
+
+        severity:
+          risk.delayRiskScore >= 90
+            ? "Critical"
+            : "High",
+
+        status: "Open",
+
+        relevantRisk: "Delay Risk",
+
+        raisedDate:
+          risk.predictionDate,
+      });
+    }
+
+    // --------------------------------------------------------
+    // Cost Risk Alert
+    // --------------------------------------------------------
+
+    if (
+      risk.costRiskLevel === "High"
+    ) {
+      alerts.push({
+        id: `${risk.projectCode}-cost`,
+        projectCode: risk.projectCode,
+        projectName: project.projectName,
+        alertType:
+          "Cost Overrun Risk Threshold Breach",
+
+        severity:
+          risk.costRiskScore >= 90
+            ? "Critical"
+            : "High",
+
+        status: "Open",
+
+        relevantRisk: "Cost Risk",
+
+        raisedDate:
+          risk.predictionDate,
+      });
+    }
+
+    // --------------------------------------------------------
+    // Overall Risk Alert
+    // --------------------------------------------------------
+
+    if (
+      risk.overallRiskLevel === "High"
+    ) {
+      alerts.push({
+        id: `${risk.projectCode}-overall`,
+        projectCode: risk.projectCode,
+        projectName: project.projectName,
+        alertType:
+          "Overall Risk Threshold Breach",
+
+        severity:
+          risk.overallRiskScore >= 90
+            ? "Critical"
+            : "High",
+
+        status: "Open",
+
+        relevantRisk: "Overall Risk",
+
+        raisedDate:
+          risk.predictionDate,
+      });
+    }
+  }
+
+  return alerts.sort(
+    (a, b) =>
+      new Date(b.raisedDate).getTime() -
+      new Date(a.raisedDate).getTime()
+  );
+}
+
+
+// ============================================================
+// SECTOR RISK
+// ============================================================
+
+export async function fetchSectorRisk(): Promise<SectorRisk[]> {
+  const [projects, risks] =
+    await Promise.all([
+      fetchProjects(),
+      fetchProjectRisks(),
+    ]);
+
+  const projectByCode = new Map(
+    projects.map((project) => [
+      project.projectCode,
+      project,
+    ])
+  );
+
+  const sectorMap = new Map<
+    string,
+    {
+      highRisk: number;
+      mediumRisk: number;
+      lowRisk: number;
+    }
+  >();
+
+  for (const risk of risks) {
+    const project =
+      projectByCode.get(
+        risk.projectCode
+      );
+
+    if (!project) {
+      continue;
+    }
+
+    const sector =
+      project.sector || "Unknown";
+
+    if (!sectorMap.has(sector)) {
+      sectorMap.set(sector, {
+        highRisk: 0,
+        mediumRisk: 0,
+        lowRisk: 0,
+      });
+    }
+
+    const stats =
+      sectorMap.get(sector)!;
+
+    if (
+      risk.overallRiskLevel === "High"
+    ) {
+      stats.highRisk += 1;
+    } else if (
+      risk.overallRiskLevel === "Medium"
+    ) {
+      stats.mediumRisk += 1;
+    } else {
+      stats.lowRisk += 1;
+    }
+  }
+
+  return Array.from(
+    sectorMap.entries()
+  )
+    .map(([sector, stats]) => ({
+      sector,
+      highRisk: stats.highRisk,
+      mediumRisk: stats.mediumRisk,
+      lowRisk: stats.lowRisk,
+    }))
+    .sort(
+      (a, b) =>
+        b.highRisk - a.highRisk
+    );
 }
