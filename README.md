@@ -9,8 +9,16 @@ Instead of relying only on retrospective project reporting, DRISHTI analyses pro
 
 > **PAIMANA tells us what is happening. DRISHTI helps us understand what may happen next, why, and where attention may be needed.**
 
-##  What Does DRISHTI Do?
+## 🖥️ Prototype Screenshots
+### Main Dashboard:
+<img width="600" height="323" alt="1" src="https://github.com/user-attachments/assets/54fc1ee3-0930-4bfd-95cb-fa1d1e0050c7" />
+<img width="600" height="323" alt="d2" src="https://github.com/user-attachments/assets/7330ccc9-e134-49cb-9d77-b24b3c924952" />
+### Project Explorer
+<img width="600" height="323" alt="pe" src="https://github.com/user-attachments/assets/11d8300b-58a3-4621-90f5-8e49dd76c953" />
+### Early Warning
+<img width="600" height="323" alt="ew" src="https://github.com/user-attachments/assets/08bfde8d-ba98-4959-8b43-4c6010e60638" />
 
+##  What Does DRISHTI Do?
 The system works through a predictive risk pipeline:
 
 ### 1. Project Data Processing
